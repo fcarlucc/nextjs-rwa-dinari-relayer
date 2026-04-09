@@ -1,46 +1,143 @@
-# 🏦 RWA Settlement Relayer (Dinari V2 PoC)
+# 🏦 RWA Settlement Relayer - Dinari V2 PoC
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black)
-![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue)
-![Solidity](https://img.shields.io/badge/Solidity-%5E0.8.20-lightgray)
 ![Dinari SDK](https://img.shields.io/badge/Dinari_SDK-V2-green)
+![Status](https://img.shields.io/badge/Status-PoC-orange)
 
-A professional Full-Stack Proof of Concept (PoC) validating the integration of **Dinari V2 RWAs** into a **Hybrid Custody Architecture**. This project demonstrates the bridge between off-chain cryptographic requirements (EIP-712) and on-chain decentralized custody via Smart Contract Vaults (EIP-1271).
+A working proof-of-concept demonstrating **Dinari V2 RWA integration** with a **Hybrid Custody Architecture** - LIVE ✅
 
-## 🧠 The Architectural Challenge
-Dinari V2 requires **EIP-712 off-chain signatures** (Permits) for order execution. This creates a functional barrier for Smart Contract-based protocols, as contracts cannot natively sign off-chain messages using standard ECDSA private keys.
+## 📊 Current Status
 
-## 💡 The Solution: Universal Settlement Gateway
-This PoC implements a **Dual-Mode Bridge** that handles the signature logic server-side while maintaining on-chain integrity:
+| Component | Status | Details |
+|-----------|--------|---------|
+| **MANAGED Flow** | ✅ Working | Direct API orders - HTTP 201, fully functional |
+| **EIP155 Vault Flow** | ⏸️ On Hold | Pending provisioning |
+| **Frontend UI** | ✅ Working | Dual-account demo with live order tracking |
+| **Smart Vault** | ✅ Deployed | ERC-1271 reference on Sepolia [`0x77DbB...`](https://sepolia.etherscan.io/address/0x77DbB5eBc222a2B0A9155D3032116Ad227dA7c84) |
 
-1.  **Smart Vault (Non-Custodial):** - Uses an **EIP-1271** compliant Vault.
-    - The Relayer generates the EIP-712 Permit.
-    - The Vault validates the authorization via the `isValidSignature` method, enabling secure decentralized settlement.
-2.  **Managed Account (Custodial):** - A standard execution path for users opting for provider-managed custody.
-    - Orders are processed directly via the managed infrastructure using high-level API authentication.
+---
 
-## ⛓️ Smart Contract Reference
-The reference implementation of the **IERC1271-compliant Vault** has been deployed and verified on the Ethereum Sepolia Testnet.
+## 💡 What This Demonstrates
 
-- **Vault Address:** [`0x77DbB5eBc222a2B0A9155D3032116Ad227dA7c84`](https://sepolia.etherscan.io/address/0x77DbB5eBc222a2B0A9155D3032116Ad227dA7c84)
-- **Standard:** ERC-1271 (Universal Signature Validation Method)
+### ✅ MANAGED Account Flow (Working)
+Direct provider-managed custody via Dinari API:
+```
+1. POST /api/dinari/order (isVault: false)
+2. → Dinari API: /order_requests/market_buy
+3. → HTTP 201 QUOTED
+4. → Status polling: QUOTED → SUBMITTED ✅
+```
+
+**Test Results:**
+- Order placed: ✅ HTTP 201
+- Portfolio updated: ✅ 0.0975 AAPL shares visible
+- Faucet working: ✅ USD+ tokens minted
+
+### ⏸️ EIP155 Vault Flow (On Hold)
+Smart Vault integration via EIP-712 signatures:
+```
+1. POST /api/dinari/order (isVault: true)
+2. → Order created with status: PENDING ✓
+3. → Polling status → Error (status: ERROR, order_id: null)
+```
+
+**Note:** Orders are created successfully but fail during processing. Provider configuration pending.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Node.js 20+
+- Dinari Sandbox Account
+- Ethereum Sepolia wallet
+
+### Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Copy and configure environment
+cp .env.example .env.local
+# Edit .env.local with your Dinari credentials
+
+# Run dev server
+npm run dev
+
+# Open http://localhost:3000
+```
+
+---
+
+## 🎮 Live Demo Features
+
+The terminal-style UI lets you:
+
+- **Check Auth** → Verify Dinari SDK is initialized
+- **Mint USD+** → Fund account with testnet tokens
+- **Place Order** → Execute market buy on MANAGED account
+- **Order Status** → Poll order progress
+- **Portfolio** → View account holdings
+- **List Orders** → See order history
+
+### How to Test
+
+1. Select **MANAGED Account** from profile selector
+2. Click **Mint USD+** to get tokens
+3. Click **Place Order** to buy a stock
+4. Click **Order Status** to see it progressing (QUOTED → SUBMITTED)
+5. Click **Portfolio** to see updated holdings
+
+For SELF-MANAGED, the order is created but fails during processing.
+
+---
+
+## 📡 API Endpoints
+
+All endpoints are in `/app/api/dinari/`:
+
+| Endpoint | Status | Purpose |
+|----------|--------|---------|
+| `/order` | ✅ | Place order (MANAGED or vault) |
+| `/order-status` | ✅ | Get order status |
+| `/order-await` | ✅ | Poll until completion |
+| `/portfolio` | ✅ | Account holdings |
+| `/orders` | ✅ | Order history |
+| `/permit` | ✅ | Health check (SDK init) |
+| `/stocks` | ✅ | Available securities |
+
+Faucet: `/api/fund-sandbox` - Mint test USD+
+
+---
 
 ## 🏗️ Project Structure
-- **`/app/api/dinari/order`**: The core execution engine. It dynamically routes requests:
-    - **Vault Flow**: Invokes `createEIP155OrderRequestPermit` (Standard Permit flow).
-    - **Managed Flow**: Invokes `createLimitBuyManagedOrderRequest` (Direct API flow).
-- **`/contracts/DummyVault.sol`**: The Solidity source for the EIP-1271 simulation.
-- **`/app/page.tsx`**: A low-latency "Terminal UI" for real-time log monitoring and flow validation.
 
-## 🚦 Integration Status (Sandbox)
-The middleware is **100% Mapped** to the Dinari Enterprise V2 SDK specifications.
+```
+nextjs-rwa-dinari-relayer/
+├── app/
+│   ├── api/dinari/           ← All RWA endpoints
+│   ├── page.tsx              ← Live demo UI
+│   ├── contracts/
+│   │   └── DummyVault.sol    ← EIP-1271 smart vault
+│   └── globals.css
+├── lib/
+│   └── eip712.ts             ← Signature generation
+└── README.md (this file)
+```
 
-> **Technical Note:** Current responses from the Sandbox environment (`401 Unauthorized`) confirm successful authentication and endpoint reachability. These statuses indicate that the **Brokerage Module** for the test entity is awaiting final administrative provisioning from the provider. The gateway is designed to handle these states gracefully, as shown in the `architecture_verified` debug logs.
+---
 
-## 🚀 Getting Started
+## 🔗 Key References
 
-### 1. Environment Configuration
-Create a `.env.local` file:
-```env
-DINARI_API_KEY_ID=your_key_id
-DINARI_API_SECRET_KEY=your_secret_key
+- **Dinari API Docs:** https://docs.dinari.com/reference/environments
+- **Smart Vault:** [Sepolia Etherscan](https://sepolia.etherscan.io/address/0xB132fDaE1bE4D601B20a3F6dEEC17AF387474f97)
+- **EIP-712 Spec:** https://eips.ethereum.org/EIPS/eip-712
+- **ERC-1271 Spec:** https://eips.ethereum.org/EIPS/eip-1271
+
+---
+
+## 📝 Notes 
+
+**What's Blocked:**
+- ❌ EIP155 vault flow - 
