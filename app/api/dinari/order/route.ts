@@ -5,7 +5,6 @@ import { ethers } from 'ethers';
 const API_KEY_ID = process.env.DINARI_API_KEY_ID;
 const API_SECRET_KEY = process.env.DINARI_API_SECRET_KEY;
 const SIGNING_PRIVATE_KEY = process.env.SIGNING_PRIVATE_KEY;
-const SEPOLIA_RPC = process.env.SEPOLIA_RPC || "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161";
 const BASE_URL = "https://api-enterprise.sandbox.dinari.com/api/v2";
 
 const DEFAULT_PAYMENT_TOKEN = "0x665b099132d79739462DfDe6874126AFe840F7a3"; // mockUSD on Sepolia sandbox
@@ -62,7 +61,7 @@ export async function POST(req: Request) {
         console.log(`[MANAGED] Market BUY: ${paymentAmount.toFixed(2)} USD`);
       } else if (orderSide === "SELL") {
         const quantity = parseFloat(orderData.quantity || "0");
-        managedPayload.quantity = quantity;
+        managedPayload.asset_quantity = quantity;
         console.log(`[MANAGED] Market SELL: ${quantity.toFixed(6)} shares`);
       }
 

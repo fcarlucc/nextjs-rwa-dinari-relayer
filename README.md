@@ -13,7 +13,7 @@ A working proof-of-concept demonstrating **Dinari V2 RWA integration** with a **
 | **MANAGED Flow** | ✅ Working | Direct API orders - HTTP 201, fully functional |
 | **EIP155 Vault Flow** | ⏸️ On Hold | Pending provisioning |
 | **Frontend UI** | ✅ Working | Dual-account demo with live order tracking |
-| **Smart Vault** | ✅ Deployed | ERC-1271 reference on Sepolia [`0x77DbB...`](https://sepolia.etherscan.io/address/0x77DbB5eBc222a2B0A9155D3032116Ad227dA7c84) |
+| **Smart Vault** | ✅ Deployed | ERC-1271 reference on Sepolia [`0x77DbB...`](https://sepolia.etherscan.io/address/0x6233C94F2f6c0d73575335994F4ddEDa12B936FC) |
 
 ---
 
@@ -131,7 +131,7 @@ nextjs-rwa-dinari-relayer/
 ## 🔗 Key References
 
 - **Dinari API Docs:** https://docs.dinari.com/reference/environments
-- **Smart Vault:** [Sepolia Etherscan](https://sepolia.etherscan.io/address/0xB132fDaE1bE4D601B20a3F6dEEC17AF387474f97)
+- **Smart Vault:** [Sepolia Etherscan](https://sepolia.etherscan.io/address/0x6233C94F2f6c0d73575335994F4ddEDa12B936FC)
 - **EIP-712 Spec:** https://eips.ethereum.org/EIPS/eip-712
 - **ERC-1271 Spec:** https://eips.ethereum.org/EIPS/eip-1271
 

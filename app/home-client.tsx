@@ -2,7 +2,7 @@
 import { useState } from 'react';
 
 // PoC Configuration
-const VAULT_ADDRESS = "0xB132fDaE1bE4D601B20a3F6dEEC17AF387474f97";
+const VAULT_ADDRESS = "0x6233C94F2f6c0d73575335994F4ddEDa12B936FC";
 const APPLE_STOCK_ID = "0196ea6d-b6de-70d5-ae41-9525959ef309";
 
 // Profile configuration
