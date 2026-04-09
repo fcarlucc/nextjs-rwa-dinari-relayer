@@ -5,6 +5,7 @@ import { ethers } from 'ethers';
 const API_KEY_ID = process.env.DINARI_API_KEY_ID;
 const API_SECRET_KEY = process.env.DINARI_API_SECRET_KEY;
 const SIGNING_PRIVATE_KEY = process.env.SIGNING_PRIVATE_KEY;
+const SEPOLIA_RPC = process.env.SEPOLIA_RPC || "https://sepolia.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161";
 const BASE_URL = "https://api-enterprise.sandbox.dinari.com/api/v2";
 
 const DEFAULT_PAYMENT_TOKEN = "0x665b099132d79739462DfDe6874126AFe840F7a3"; // mockUSD on Sepolia sandbox
@@ -241,18 +242,16 @@ export async function POST(req: Request) {
     }
 
     // ===== STEP 3: SUBMIT SIGNED PERMIT =====
-    console.log(`\n[EIP155:3] Submitting Signed Permit...`);
+    // We must submit the order to Dinari first, otherwise the /permit_transaction 
+    // endpoint fails with 500 searching for an un-submitted order state.
+    console.log(`\n[EIP155:3] Submitting Signed Permit to Dinari Backend...`);
 
-    // Extract the correct order_request_id
     const orderId = permitData.order_request_id;
     if (!orderId) {
-      console.error(`[EIP155:3] Missing order_request_id!`, permitData);
+      console.error(`[EIP155:3] Missing order_request_id!`);
       return NextResponse.json({
         status: "error",
-        message: "Missing order_request_id from permit response",
-        flow: "EIP155",
-        step: "3/3: Submit Permit",
-        received_data: permitData
+        message: "Missing order_request_id from permit response"
       }, { status: 400 });
     }
 
@@ -262,11 +261,7 @@ export async function POST(req: Request) {
       permit_signature: signature
     };
 
-    console.log(`[EIP155:3] Order ID: ${orderId}`);
-    console.log(`[EIP155:3] Payload:`, JSON.stringify(submitPayload, null, 2));
-    console.log(`[EIP155:3] Signature length: ${signature.length}`);
     console.log(`[EIP155:3] → POST ${submitUrl}`);
-
     const submitResponse = await fetch(submitUrl, {
       method: 'POST',
       headers: {
@@ -279,35 +274,115 @@ export async function POST(req: Request) {
     });
 
     let submitData;
-    try {
-      submitData = await submitResponse.json();
-    } catch {
-      submitData = { message: await submitResponse.text() };
-    }
-
+    try { submitData = await submitResponse.json(); } catch { submitData = { message: await submitResponse.text() }; }
     console.log(`[EIP155:3] ← ${submitResponse.status}`, submitData);
 
     if (!submitResponse.ok) {
       return NextResponse.json({
         status: "error",
         flow: "EIP155",
-        step: "3/3: Submit Permit",
-        http_code: submitResponse.status,
-        endpoint: submitUrl,
-        sent_payload: submitPayload,
+        step: "3/5: Submit Permit",
         provider_response: submitData
       });
     }
 
-    console.log(`\n[EIP155] ✓ ORDER COMPLETE (Status: ${submitData.status})`);
+    // ===== STEP 4: GET PERMIT TRANSACTION ======
+    console.log(`\n[EIP155:4] Requesting Permit Transaction for EVM...`);
+    const permitTxUrl = `${BASE_URL}/accounts/${accountId}/order_requests/eip155/permit_transaction`;
+    console.log(`[EIP155:4] → POST ${permitTxUrl}`);
 
-    // Order completed successfully - no on-chain transaction needed for EIP155 managed accounts
+    const txPayload = {
+      order_request_id: orderId,
+      permit_signature: signature
+    };
+
+    console.log(`[EIP155:4] txPayload:`, JSON.stringify(txPayload, null, 2));
+
+    // Fallback headers
+    const txResponse = await fetch(permitTxUrl, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-API-Key-Id': API_KEY_ID,
+        'X-API-Secret-Key': API_SECRET_KEY
+      },
+      body: JSON.stringify(txPayload),
+      cache: 'no-store'
+    });
+
+    let txData;
+    try {
+      txData = await txResponse.json();
+    } catch {
+      txData = { message: await txResponse.text() };
+    }
+    
+    console.log(`[EIP155:4] ← ${txResponse.status}`, JSON.stringify(txData).substring(0, 150) + "...");
+
+    if (!txResponse.ok) {
+      return NextResponse.json({
+        status: "error",
+        flow: "EIP155",
+        step: "4/5: Permit Transaction",
+        http_code: txResponse.status,
+        endpoint: permitTxUrl,
+        provider_response: txData
+      });
+    }
+
+    // ===== STEP 5: BROADCAST ON-CHAIN ======
+    console.log(`\n[EIP155:5] Broadcasting via Ethers to Sepolia RPC...`);
+    let txHash: string | undefined;
+    
+    try {
+      const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC);
+      const wallet = new ethers.Wallet(SIGNING_PRIVATE_KEY, provider);
+
+      // Dinari returns { contract_address, data, value, abi, args }
+      const contractAddress = txData.contract_address || txData.to;
+      const evmData = txData.data;
+      const evmValue = txData.value;
+      
+      if (!contractAddress || !evmData) {
+        throw new Error("Could not parse valid EVM transaction from permit_transaction response");
+      }
+
+      const txRequest: any = {
+        to: contractAddress,
+        data: evmData
+      };
+      
+      if (evmValue) {
+        txRequest.value = evmValue.startsWith('0x') ? evmValue : BigInt(evmValue).toString();
+      }
+      
+      console.log(`[EIP155:5] Sending TX to ${contractAddress}...`);
+      
+      const tx = await wallet.sendTransaction(txRequest);
+      txHash = tx.hash;
+      console.log(`[EIP155:5] ✓ Broadcast successful! TxHash: ${txHash}`);
+
+    } catch (error: any) {
+      console.error(`[EIP155:5] Broadcasting failed:`, error.message);
+      return NextResponse.json({
+        status: "error",
+        flow: "EIP155",
+        step: "5/5: Broadcast Transaction",
+        message: "Failed to broadcast transaction on EVM",
+        error: error.message,
+        payload_received: txData
+      }, { status: 500 });
+    }
+
+    console.log(`\n[EIP155] ✓ FULL ORDER COMPLETE (TxHash: ${txHash})`);
+
     return NextResponse.json({
       status: "success",
       flow: "EIP155",
       order_id: orderId,
-      order_status: submitData.status,
-      message: "Order submitted to Dinari successfully",
+      tx_hash: txHash,
+      message: "Order signed and broadcasted to EVM successfully",
       account_id: accountId
     });
 
