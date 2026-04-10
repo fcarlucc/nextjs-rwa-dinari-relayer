@@ -6,13 +6,13 @@ const VAULT_ADDRESS = "0x6233C94F2f6c0d73575335994F4ddEDa12B936FC";
 const APPLE_STOCK_ID = "0196ea6d-b6de-70d5-ae41-9525959ef309";
 
 // Profile configuration
-type ProfileType = 'self-managed' | 'managed';
+type ProfileType = 'self-managed-vault' | 'self-managed-wallet' | 'managed';
 
 interface Profile {
   id: ProfileType;
   label: string;
   emoji: string;
-  color: 'blue' | 'green';
+  color: 'blue' | 'green' | 'purple';
   accountId: string;
   vaultAddress?: string;
   isVault: boolean;
@@ -20,21 +20,31 @@ interface Profile {
 }
 
 interface HomeClientProps {
-  accountIdSelfManaged: string;
+  accountIdSelfManagedVault: string;
+  accountIdSelfManagedWallet: string;
   accountIdManaged: string;
 }
 
-export default function HomeClient({ accountIdSelfManaged, accountIdManaged }: HomeClientProps) {
+export default function HomeClient({ accountIdSelfManagedVault, accountIdSelfManagedWallet, accountIdManaged }: HomeClientProps) {
   const PROFILES: Record<ProfileType, Profile> = {
-    'self-managed': {
-      id: 'self-managed',
-      label: 'SELF-MANAGED',
+    'self-managed-vault': {
+      id: 'self-managed-vault',
+      label: 'SELF-MANAGED (VAULT)',
       emoji: '🔐',
       color: 'blue',
-      accountId: accountIdSelfManaged,
+      accountId: accountIdSelfManagedVault,
       vaultAddress: VAULT_ADDRESS,
-      isVault: true,
-      description: 'EIP-712 with Vault'
+      isVault: true, // triggers EIP155 backend logic
+      description: 'EIP-712 with Smart Contract Wallet (ERC-1271)'
+    },
+    'self-managed-wallet': {
+      id: 'self-managed-wallet',
+      label: 'SELF-MANAGED (WALLET)',
+      emoji: '🦊',
+      color: 'purple',
+      accountId: accountIdSelfManagedWallet,
+      isVault: true, // triggers EIP155 backend logic
+      description: 'EIP-712 with Standard EOA (MetaMask)'
     },
     'managed': {
       id: 'managed',
@@ -47,7 +57,7 @@ export default function HomeClient({ accountIdSelfManaged, accountIdManaged }: H
     }
   };
 
-  const [activeProfile, setActiveProfile] = useState<ProfileType>('self-managed');
+  const [activeProfile, setActiveProfile] = useState<ProfileType>('self-managed-vault');
   const [response, setResponse] = useState<any>(null);
   const [loading, setLoading] = useState<string>('');
   const [orderType, setOrderType] = useState<'BUY' | 'SELL'>('BUY');
@@ -68,6 +78,10 @@ export default function HomeClient({ accountIdSelfManaged, accountIdManaged }: H
     blue: {
       primary: 'bg-blue-600 hover:bg-blue-500',
       secondary: 'bg-blue-700 hover:bg-blue-600'
+    },
+    purple: {
+      primary: 'bg-purple-600 hover:bg-purple-500',
+      secondary: 'bg-purple-700 hover:bg-purple-600'
     },
     green: {
       primary: 'bg-green-600 hover:bg-green-500',
@@ -144,6 +158,26 @@ export default function HomeClient({ accountIdSelfManaged, accountIdManaged }: H
       });
       const data = await res.json();
       log(data);
+
+      // Auto-trigger polling for EIP155
+      if (data.status === 'success' && data.flow === 'EIP155' && data.order_request_id) {
+        setCheckOrderId(data.order_request_id);
+        
+        const pollRes = await fetch('/api/dinari/order-await', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accountId, orderId: data.order_request_id })
+        });
+        const pollData = await pollRes.json();
+        
+        // Show the resolved status on UI
+        log({
+          initial_request: data,
+          poll_result: pollData
+        });
+      } else if (data.status === 'success' && data.order_id) {
+         setCheckOrderId(data.order_id);
+      }
     } catch (error: any) {
       log({ error: error.message });
     }
@@ -205,33 +239,45 @@ export default function HomeClient({ accountIdSelfManaged, accountIdManaged }: H
         {/* Header */}
         <div className="mb-8 border-b border-zinc-800 pb-6">
           <h1 className="text-2xl font-bold mb-2">RWA Settlement PoC V2</h1>
-          <p className="text-zinc-500 text-sm">Dinari Permit Flow - Dual Account Testing (DRY Refactored)</p>
+          <p className="text-zinc-500 text-sm">Dinari Permit Flow - Triple Account Testing (DRY Refactored)</p>
           
           {/* Profile Selector */}
           <div className="mt-4 space-y-4">
             <p className="text-xs text-zinc-400">Select Active Profile:</p>
             <div className="flex gap-2">
-              {Object.values(PROFILES).map((p) => (
+              {Object.values(PROFILES).map((p) => {
+                const isActive = activeProfile === p.id;
+                let activeClass = 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600';
+                if (isActive) {
+                  if (p.color === 'blue') activeClass = 'border-blue-500 bg-blue-900/50 text-white';
+                  if (p.color === 'purple') activeClass = 'border-purple-500 bg-purple-900/50 text-white';
+                  if (p.color === 'green') activeClass = 'border-green-500 bg-green-900/50 text-white';
+                }
+                return (
                 <button
                   key={p.id}
                   onClick={() => setActiveProfile(p.id)}
-                  className={`flex-1 px-4 py-3 rounded transition text-sm font-semibold border-2 ${
-                    activeProfile === p.id
-                      ? `border-${p.color}-500 bg-${p.color}-900/50 text-white`
-                      : 'border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600'
-                  }`}
+                  className={`flex-1 px-4 py-3 rounded transition text-sm font-semibold border-2 ${activeClass}`}
                 >
                   {p.emoji} {p.label}
                   <br />
                   <span className="text-xs text-zinc-500">{p.description}</span>
                 </button>
-              ))}
+              )})}
             </div>
           </div>
 
           {/* Active Profile Info */}
-          <div className={`mt-4 p-3 rounded border border-${color}-700/50 bg-${color}-900/30`}>
-            <p className={`text-${color}-300 font-semibold mb-1`}>{profile.emoji} {profile.label} - {profile.description}</p>
+          <div className={`mt-4 p-3 rounded border ${
+            color === 'blue' ? 'border-blue-700/50 bg-blue-900/30' :
+            color === 'purple' ? 'border-purple-700/50 bg-purple-900/30' :
+            'border-green-700/50 bg-green-900/30'
+          }`}>
+            <p className={`font-semibold mb-1 ${
+              color === 'blue' ? 'text-blue-300' :
+              color === 'purple' ? 'text-purple-300' :
+              'text-green-300'
+            }`}>{profile.emoji} {profile.label} - {profile.description}</p>
             {profile.vaultAddress && (
               <p className="text-xs text-zinc-500">Vault: <code className="bg-zinc-900 px-2 py-1 rounded">{profile.vaultAddress}</code></p>
             )}

@@ -281,108 +281,22 @@ export async function POST(req: Request) {
       return NextResponse.json({
         status: "error",
         flow: "EIP155",
-        step: "3/5: Submit Permit",
+        step: "3/3: Submit Permit",
         provider_response: submitData
-      });
+      }, { status: submitResponse.status });
     }
 
-    // ===== STEP 4: GET PERMIT TRANSACTION ======
-    console.log(`\n[EIP155:4] Requesting Permit Transaction for EVM...`);
-    const permitTxUrl = `${BASE_URL}/accounts/${accountId}/order_requests/eip155/permit_transaction`;
-    console.log(`[EIP155:4] → POST ${permitTxUrl}`);
+    console.log(`\n[EIP155] ✓ FULL PROXIED ORDER COMPLETE (Request ID: ${orderId})`);
 
-    const txPayload = {
-      order_request_id: orderId,
-      permit_signature: signature
-    };
-
-    console.log(`[EIP155:4] txPayload:`, JSON.stringify(txPayload, null, 2));
-
-    // Fallback headers
-    const txResponse = await fetch(permitTxUrl, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-API-Key-Id': API_KEY_ID,
-        'X-API-Secret-Key': API_SECRET_KEY
-      },
-      body: JSON.stringify(txPayload),
-      cache: 'no-store'
-    });
-
-    let txData;
-    try {
-      txData = await txResponse.json();
-    } catch {
-      txData = { message: await txResponse.text() };
-    }
-    
-    console.log(`[EIP155:4] ← ${txResponse.status}`, JSON.stringify(txData).substring(0, 150) + "...");
-
-    if (!txResponse.ok) {
-      return NextResponse.json({
-        status: "error",
-        flow: "EIP155",
-        step: "4/5: Permit Transaction",
-        http_code: txResponse.status,
-        endpoint: permitTxUrl,
-        provider_response: txData
-      });
-    }
-
-    // ===== STEP 5: BROADCAST ON-CHAIN ======
-    console.log(`\n[EIP155:5] Broadcasting via Ethers to Sepolia RPC...`);
-    let txHash: string | undefined;
-    
-    try {
-      const provider = new ethers.JsonRpcProvider(SEPOLIA_RPC);
-      const wallet = new ethers.Wallet(SIGNING_PRIVATE_KEY, provider);
-
-      // Dinari returns { contract_address, data, value, abi, args }
-      const contractAddress = txData.contract_address || txData.to;
-      const evmData = txData.data;
-      const evmValue = txData.value;
-      
-      if (!contractAddress || !evmData) {
-        throw new Error("Could not parse valid EVM transaction from permit_transaction response");
-      }
-
-      const txRequest: any = {
-        to: contractAddress,
-        data: evmData
-      };
-      
-      if (evmValue) {
-        txRequest.value = evmValue.startsWith('0x') ? evmValue : BigInt(evmValue).toString();
-      }
-      
-      console.log(`[EIP155:5] Sending TX to ${contractAddress}...`);
-      
-      const tx = await wallet.sendTransaction(txRequest);
-      txHash = tx.hash;
-      console.log(`[EIP155:5] ✓ Broadcast successful! TxHash: ${txHash}`);
-
-    } catch (error: any) {
-      console.error(`[EIP155:5] Broadcasting failed:`, error.message);
-      return NextResponse.json({
-        status: "error",
-        flow: "EIP155",
-        step: "5/5: Broadcast Transaction",
-        message: "Failed to broadcast transaction on EVM",
-        error: error.message,
-        payload_received: txData
-      }, { status: 500 });
-    }
-
-    console.log(`\n[EIP155] ✓ FULL ORDER COMPLETE (TxHash: ${txHash})`);
-
+    // We stop here! Dinari is responsible for the EVM broadcast.
+    // The order enters PENDING status and must be polled.
     return NextResponse.json({
       status: "success",
       flow: "EIP155",
-      order_id: orderId,
-      tx_hash: txHash,
-      message: "Order signed and broadcasted to EVM successfully",
+      order_id: null, // order_id is null until SUBMITTED by Dinari
+      order_request_id: orderId,
+      order_status: "PENDING",
+      message: "Order signed and submitted to Dinari successfully. Awaiting EVM execution.",
       account_id: accountId
     });
 

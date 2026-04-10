@@ -38,11 +38,31 @@ export async function signPermit(
     const types = { ...permitTemplate.types };
     delete types['EIP712Domain'];
 
+    // Recursively format large numbers to strings avoiding Ethers BigInt overflow checks
+    const sanitizeMessage = (obj: any): any => {
+      if (obj === null || typeof obj !== 'object') {
+        if (typeof obj === 'number') {
+          return obj.toLocaleString('fullwide', { useGrouping: false });
+        }
+        return obj;
+      }
+      if (Array.isArray(obj)) {
+        return obj.map(sanitizeMessage);
+      }
+      const result: any = {};
+      for (const [key, value] of Object.entries(obj)) {
+        result[key] = sanitizeMessage(value);
+      }
+      return result;
+    };
+    
+    const sanitizedMessage = sanitizeMessage(permitTemplate.message);
+
     // Sign the permit using EIP-712
     const signature = await wallet.signTypedData(
       permitTemplate.domain,
       types,
-      permitTemplate.message
+      sanitizedMessage
     );
 
     console.log('[EIP-712] Permit signed successfully');
